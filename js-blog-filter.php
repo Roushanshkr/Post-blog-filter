@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Custom Post Filter for Elementor
  * Description: AJAX-powered filtering for Elementor Posts and Post Carousel, supporting default and custom post types.
- * Version: 1.0.5
+ * Version: 1.0.10
  * Author: Your Name
  */
 
@@ -14,11 +14,15 @@ class Custom_Post_Filter_Plugin {
     }
 
     public function init() {
+        $this->debug_log("init: Starting initialization");
+        
         if (!did_action('elementor/loaded')) {
+            $this->debug_log("init: Elementor not loaded");
             add_action('admin_notices', [$this, 'elementor_missing_notice']);
             return;
         }
 
+        $this->debug_log("init: Registering hooks");
         add_action('elementor/element/posts/section_query/after_section_end', [$this, 'add_filter_controls'], 10, 2);
         add_action('elementor/element/posts-carousel/section_query/after_section_end', [$this, 'add_filter_controls'], 10, 2);
         add_action('elementor/frontend/widget/before_render', [$this, 'before_widget_render'], 10, 1);
@@ -29,13 +33,36 @@ class Custom_Post_Filter_Plugin {
     }
 
     public function elementor_missing_notice() {
+        $this->debug_log("elementor_missing_notice: Showing Elementor missing notice");
         echo '<div class="error"><p>Custom Post Filter requires Elementor to be installed and activated.</p></div>';
     }
 
-    public function add_filter_controls($element, $args) {
-        if (!in_array($element->get_name(), ['posts', 'posts-carousel'])) return;
+    private function is_elementor_editor() {
+        $is_editor = \Elementor\Plugin::$instance->editor->is_edit_mode() || 
+                     \Elementor\Plugin::$instance->preview->is_preview_mode() || 
+                     (defined('DOING_AJAX') && DOING_AJAX && isset($_REQUEST['action']) && $_REQUEST['action'] === 'elementor_ajax');
+        $this->debug_log("is_elementor_editor: Result = " . ($is_editor ? 'true' : 'false'));
+        return $is_editor;
+    }
 
-        $post_type = $element->get_settings('posts_post_type') ?? 'post';
+    public function add_filter_controls($element, $args) {
+        $this->debug_log("add_filter_controls: Called for widget " . $element->get_name());
+        
+        if ($this->is_elementor_editor() && defined('DOING_AJAX') && DOING_AJAX && isset($_REQUEST['action']) && $_REQUEST['action'] === 'elementor_ajax') {
+            $this->debug_log("add_filter_controls: Skipped in Elementor AJAX");
+            return;
+        }
+
+        if (!in_array($element->get_name(), ['posts', 'posts-carousel'])) {
+            $this->debug_log("add_filter_controls: Invalid widget type, skipping");
+            return;
+        }
+
+        // Safely get settings
+        $settings = $element->get_settings();
+        $post_type = isset($settings['posts_post_type']) ? $settings['posts_post_type'] : 'post';
+        $this->debug_log("add_filter_controls: Post type = $post_type, Settings = " . (is_array($settings) ? 'array' : 'null'));
+
         $taxonomies = get_object_taxonomies($post_type, 'objects');
         $taxonomy_options = [];
         foreach ($taxonomies as $taxonomy) {
@@ -43,6 +70,7 @@ class Custom_Post_Filter_Plugin {
                 $taxonomy_options[$taxonomy->name] = $taxonomy->label;
             }
         }
+        $this->debug_log("add_filter_controls: Found " . count($taxonomy_options) . " taxonomies: " . implode(', ', array_keys($taxonomy_options)));
 
         $element->start_controls_section(
             'section_filter',
@@ -77,14 +105,23 @@ class Custom_Post_Filter_Plugin {
         );
 
         $element->end_controls_section();
+        $this->debug_log("add_filter_controls: Filter Settings section added successfully");
     }
 
     public function before_widget_render($widget) {
-        if (!in_array($widget->get_name(), ['posts', 'posts-carousel'])) return;
+        if ($this->is_elementor_editor()) {
+            $this->debug_log("before_widget_render: Skipped in editor");
+            return;
+        }
 
+        if (!in_array($widget->get_name(), ['posts', 'posts-carousel'])) {
+            $this->debug_log("before_widget_render: Invalid widget type " . $widget->get_name());
+            return;
+        }
+
+        $this->debug_log("before_widget_render: Processing widget " . $widget->get_name());
         $settings = $widget->get_settings_for_display();
-        $debug_log = WP_CONTENT_DIR . '/custom-post-filter-debug.log';
-        file_put_contents($debug_log, date('Y-m-d H:i:s') . " - Widget Settings: " . print_r($settings, true) . "\n", FILE_APPEND);
+        $this->debug_log("before_widget_render: Widget Settings = " . print_r($settings, true));
 
         if (isset($settings['enable_filter']) && $settings['enable_filter'] === 'yes') {
             // Dynamically detect template ID from possible keys
@@ -93,13 +130,13 @@ class Custom_Post_Filter_Plugin {
             foreach ($template_keys as $key) {
                 if (isset($settings[$key]) && intval($settings[$key]) > 0) {
                     $template_id = intval($settings[$key]);
-                    file_put_contents($debug_log, date('Y-m-d H:i:s') . " - Template ID found in '$key': $template_id\n", FILE_APPEND);
+                    $this->debug_log("before_widget_render: Template ID found in '$key': $template_id");
                     break;
                 }
             }
 
             if ($template_id === 0) {
-                file_put_contents($debug_log, date('Y-m-d H:i:s') . " - No valid template ID found in settings\n", FILE_APPEND);
+                $this->debug_log("before_widget_render: No valid template ID found");
             }
 
             // Get widget container classes
@@ -146,29 +183,44 @@ class Custom_Post_Filter_Plugin {
                 'data-container-classes' => $container_classes,
                 'data-article-classes' => $article_classes,
             ]);
+            $this->debug_log("before_widget_render: Render attributes added");
+        }
+    }
+
+    private function debug_log($message) {
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('Custom Post Filter [v1.0.10]: ' . $message);
         }
     }
 
     public function enqueue_assets() {
+        if ($this->is_elementor_editor()) {
+            $this->debug_log("enqueue_assets: Skipped in editor");
+            return;
+        }
+
+        $this->debug_log("enqueue_assets: Enqueuing scripts and styles");
         wp_enqueue_script(
             'custom-post-filter',
             plugin_dir_url(__FILE__) . 'assets/js/filter.js',
             ['jquery'],
-            '1.0.5',
+            '1.0.10',
             true
         );
 
         wp_localize_script('custom-post-filter', 'customPostFilter', [
             'ajax_url' => admin_url('admin-ajax.php'),
             'nonce' => wp_create_nonce('custom_post_filter_nonce'),
+            'is_admin' => is_admin(),
         ]);
 
         wp_enqueue_style(
             'custom-post-filter-css',
             plugin_dir_url(__FILE__) . 'assets/css/filter.css',
             [],
-            '1.0.5'
+            '1.0.10'
         );
+        $this->debug_log("enqueue_assets: Assets enqueued");
     }
 }
 

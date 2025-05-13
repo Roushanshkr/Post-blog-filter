@@ -1,4 +1,16 @@
 jQuery(document).ready(function($) {
+    console.log('Custom Post Filter [v1.0.10]: Script loaded');
+    
+    // Skip if in Elementor editor, preview, or admin
+    if ($('body').hasClass('elementor-editor-active') || 
+        $('body').hasClass('elementor-editor-preview') || 
+        window.location.search.includes('elementor-preview') || 
+        (typeof customPostFilter !== 'undefined' && customPostFilter.is_admin)) {
+        console.log('Custom Post Filter [v1.0.10]: Skipping in Elementor editor or admin');
+        return;
+    }
+
+    console.log('Custom Post Filter [v1.0.10]: Processing widgets');
     $('.elementor-widget-posts, .elementor-widget-posts-carousel').each(function() {
         const $widget = $(this);
         const filterBy = $widget.data('filter-by') || 'category';
@@ -11,11 +23,11 @@ jQuery(document).ready(function($) {
         const articleClasses = $widget.data('article-classes') || 'elementor-post elementor-grid-item ecs-post-loop ast-article-single';
 
         if (!filterBy) {
-            console.warn('No filter taxonomy defined for widget:', $widget);
+            console.warn('Custom Post Filter [v1.0.10]: No filter taxonomy defined for widget:', $widget);
             return;
         }
 
-        console.log('Initializing filter:', { filterBy, postType, templateId, queryId, widgetType, containerClasses, articleClasses });
+        console.log('Custom Post Filter [v1.0.10]: Initializing filter:', { filterBy, postType, templateId, queryId, widgetType, containerClasses, articleClasses });
 
         const taxonomyLabel = filterBy === 'category' ? 'Categories' : filterBy === 'post_tag' ? 'Tags' : filterBy;
         const $filter = $(`
@@ -30,8 +42,7 @@ jQuery(document).ready(function($) {
         $widget.prepend($filter);
 
         const $termsSelect = $filter.find('.custom-post-filter-terms');
-        console.log('Term Select:: ', $termsSelect);
-        
+        console.log('Custom Post Filter [v1.0.10]: Term Select initialized:', $termsSelect);
 
         $.ajax({
             url: customPostFilter.ajax_url,
@@ -42,8 +53,11 @@ jQuery(document).ready(function($) {
                 taxonomy: filterBy,
                 post_type: postType,
             },
+            beforeSend: function() {
+                console.log('Custom Post Filter [v1.0.10]: Sending get_terms AJAX');
+            },
             success: function(response) {
-                console.log('Get terms response:', response);
+                console.log('Custom Post Filter [v1.0.10]: Get terms response:', response);
                 if (response.success && response.data.terms.length) {
                     response.data.terms.sort((a, b) => a.name.localeCompare(b.name));
                     response.data.terms.forEach(term => {
@@ -56,21 +70,22 @@ jQuery(document).ready(function($) {
                 }
             },
             error: function(xhr) {
-                console.error('Terms loading failed:', xhr.responseText);
+                console.error('Custom Post Filter [v1.0.10]: Terms loading failed:', xhr.responseText);
                 $termsSelect.append('<option value="0">Error loading terms</option>');
             },
         });
 
         $termsSelect.on('change', function() {
             const filterValue = $(this).val();
+            console.log('Custom Post Filter [v1.0.10]: Filter changed, value:', filterValue);
             applyFilter(filterBy, filterValue);
         });
 
         function applyFilter(taxonomy, filterValue) {
-            console.log("FUNCTION RESTARTed");
+            console.log('Custom Post Filter [v1.0.10]: FUNCTION RESTARTed');
             $widget.addClass('custom-post-filter-loading');
-            console.log('Applying filter:', { taxonomy, filterValue, postType, templateId, queryId, widgetType, containerClasses, articleClasses });
-            console.log('WIDGET SETTINGS:: ', JSON.stringify(widgetSettings));
+            console.log('Custom Post Filter [v1.0.10]: Applying filter:', { taxonomy, filterValue, postType, templateId, queryId, widgetType, containerClasses, articleClasses });
+            console.log('Custom Post Filter [v1.0.10]: WIDGET SETTINGS:', JSON.stringify(widgetSettings));
             
             $.ajax({
                 url: customPostFilter.ajax_url,
@@ -88,48 +103,30 @@ jQuery(document).ready(function($) {
                     container_classes: containerClasses,
                     article_classes: articleClasses,
                 },
+                beforeSend: function() {
+                    console.log('Custom Post Filter [v1.0.10]: Sending filter AJAX');
+                },
                 success: function(response) {
+                    console.log('Custom Post Filter [v1.0.10]: Filter response:', response);
                     if (response.success && response.data.html) {
                         const $container = $widget.find('.elementor-widget-container, .swiper-wrapper');
                         if ($container.length) {
                             $container.html(response.data.html);
                             
                             if (typeof elementorFrontend !== 'undefined') {
-                                // Reinitialize Elementor frontend scripts and CSS
+                                console.log('Custom Post Filter [v1.0.10]: Reinitializing Elementor frontend');
                                 elementorFrontend.elementsHandler.runReadyTrigger($container);
                                 elementorFrontend.elementsHandler.runReadyTrigger($widget);
-                                // Trigger resize to fix grid layouts
-                                // $(window).trigger('resize');
-                                // Ensure dynamic CSS is loaded
                                 if (typeof elementorFrontend.init === 'function') {
                                     elementorFrontend.init();
                                 }
                             }
-                            // if ($widget.hasClass('elementor-widget-posts-carousel') && typeof Swiper !== 'undefined') {
-                            //     const $swiperContainer = $widget.find('.swiper-container');
-                            //     console.log('Swiper Container', $swiperContainer);
-                                
-                            //     if ($swiperContainer.length) {
-                            //         new Swiper($swiperContainer[0], {
-                            //             slidesPerView: widgetSettings.slides_per_view || 3,
-                            //             spaceBetween: widgetSettings.space_between || 30,
-                            //             loop: widgetSettings.loop || false,
-                            //             navigation: {
-                            //                 nextEl: '.swiper-button-next',
-                            //                 prevEl: '.swiper-button-prev',
-                            //             },
-                            //             pagination: {
-                            //                 el: '.swiper-pagination',
-                            //                 clickable: true,
-                            //             },
-                            //         });
-                            //     }
-                            // }
                         } else {
-                            console.error('No container found for update');
+                            console.error('Custom Post Filter [v1.0.10]: No container found for update');
                             $widget.append('<p>Error: No container found to display posts.</p>');
                         }
                     } else {
+                        console.log('Custom Post Filter [v1.0.10]: No posts found or error:', response.data?.message);
                         $widget.find('.elementor-posts-container, .swiper-wrapper')
                             .html(`<p>${response.data?.message || 'No posts found.'}</p>`);
                     }
@@ -137,13 +134,13 @@ jQuery(document).ready(function($) {
                     $widget.removeClass('custom-post-filter-loading');
                 },
                 error: function(xhr) {
-                    console.error('Filter AJAX failed:', xhr.responseText);
+                    console.error('Custom Post Filter [v1.0.10]: Filter AJAX failed:', xhr.responseText);
                     $widget.find('.elementor-posts-container, .swiper-wrapper')
                         .html('<p>Error loading posts.</p>');
                     $widget.removeClass('custom-post-filter-loading');
                 },
                 complete: function() {
-                    // $widget.removeClass('custom-post-filter-loading');
+                    console.log('Custom Post Filter [v1.0.10]: Filter AJAX completed');
                 },
             });
         }

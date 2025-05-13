@@ -10,7 +10,18 @@ class Custom_Post_Filter_Ajax_Handler {
     }
 
     public function handle_filter() {
+        $this->debug_log("handle_filter: AJAX request received");
+        
+        if (isset($_GET['elementor-preview']) || 
+            \Elementor\Plugin::$instance->editor->is_edit_mode() || 
+            (defined('DOING_AJAX') && DOING_AJAX && isset($_REQUEST['action']) && $_REQUEST['action'] === 'elementor_ajax')) {
+            $this->debug_log("handle_filter: Skipped in editor or Elementor AJAX");
+            wp_send_json_error(['message' => __('Filter disabled in Elementor editor.', 'custom-post-filter')]);
+            wp_die();
+        }
+
         check_ajax_referer('custom_post_filter_nonce', 'nonce');
+        $this->debug_log("handle_filter: Nonce verified");
 
         $filter_by = isset($_POST['filter_by']) ? sanitize_text_field($_POST['filter_by']) : '';
         $filter_value = isset($_POST['filter_value']) ? intval($_POST['filter_value']) : 0;
@@ -21,11 +32,10 @@ class Custom_Post_Filter_Ajax_Handler {
         $container_classes = isset($_POST['container_classes']) ? sanitize_text_field($_POST['container_classes']) : 'elementor-posts-container elementor-grid';
         $article_classes = isset($_POST['article_classes']) ? sanitize_text_field($_POST['article_classes']) : 'elementor-post elementor-grid-item ecs-post-loop ast-article-single';
 
-        $debug_log = WP_CONTENT_DIR . '/custom-post-filter-debug.log';
-        file_put_contents($debug_log, date('Y-m-d H:i:s') . " - Filter Request: filter_by=$filter_by, filter_value=$filter_value, post_type=$post_type, template_id=$template_id, container_classes=$container_classes, article_classes=$article_classes\n", FILE_APPEND);
+        $this->debug_log("handle_filter: Request data - filter_by=$filter_by, filter_value=$filter_value, post_type=$post_type, template_id=$template_id, container_classes=$container_classes, article_classes=$article_classes");
 
         if (empty($filter_by)) {
-            file_put_contents($debug_log, date('Y-m-d H:i:s') . " - Error: No taxonomy selected\n", FILE_APPEND);
+            $this->debug_log("handle_filter: Error: No taxonomy selected");
             wp_send_json_error(['message' => 'No taxonomy selected']);
             wp_die();
         }
@@ -48,19 +58,20 @@ class Custom_Post_Filter_Ajax_Handler {
                     'include_children' => true,
                 ],
             ];
+            $this->debug_log("handle_filter: Added tax_query for $filter_by, term $filter_value");
         } elseif (!taxonomy_exists($filter_by)) {
-            file_put_contents($debug_log, date('Y-m-d H:i:s') . " - Error: Invalid taxonomy: $filter_by\n", FILE_APPEND);
+            $this->debug_log("handle_filter: Error: Invalid taxonomy: $filter_by");
             wp_send_json_error(['message' => 'Invalid taxonomy']);
             wp_die();
         }
 
         $query = new WP_Query($query_args);
-        file_put_contents($debug_log, date('Y-m-d H:i:s') . " - Found Posts: " . $query->found_posts . "\n", FILE_APPEND);
+        $this->debug_log("handle_filter: Found Posts: " . $query->found_posts);
 
         ob_start();
         if ($query->have_posts()) {
             if ($template_id && get_post_status($template_id) === 'publish') {
-                file_put_contents($debug_log, date('Y-m-d H:i:s') . " - Rendering with Template ID: $template_id\n", FILE_APPEND);
+                $this->debug_log("handle_filter: Rendering with Template ID: $template_id");
 
                 // Determine container class and inline styles
                 $container_class = $widget_type === 'posts-carousel' ? 'swiper-wrapper' : 'elementor-posts-container';
@@ -87,7 +98,7 @@ class Custom_Post_Filter_Ajax_Handler {
                 }
                 echo '</div>';
             } else {
-                file_put_contents($debug_log, date('Y-m-d H:i:s') . " - No valid template ID, using fallback rendering\n", FILE_APPEND);
+                $this->debug_log("handle_filter: No valid template ID, using fallback rendering");
                 echo '<div class="elementor-posts-container elementor-grid">';
                 while ($query->have_posts()) {
                     $query->the_post();
@@ -106,17 +117,18 @@ class Custom_Post_Filter_Ajax_Handler {
             }
         } else {
             echo '<p>' . __('No posts found.', 'custom-post-filter') . '</p>';
-            file_put_contents($debug_log, date('Y-m-d H:i:s') . " - No posts found\n", FILE_APPEND);
+            $this->debug_log("handle_filter: No posts found");
         }
         $html = ob_get_clean();
         wp_reset_postdata();
 
-        file_put_contents($debug_log, date('Y-m-d H:i:s') . " - HTML Length: " . strlen($html) . "\n", FILE_APPEND);
+        $this->debug_log("handle_filter: HTML Length: " . strlen($html));
 
         if (!empty($html)) {
+            $this->debug_log("handle_filter: Sending success response");
             wp_send_json_success(['html' => $html]);
         } else {
-            file_put_contents($debug_log, date('Y-m-d H:i:s') . " - Error: No HTML generated\n", FILE_APPEND);
+            $this->debug_log("handle_filter: Error: No HTML generated");
             wp_send_json_error(['message' => 'No posts found or rendering failed']);
         }
 
@@ -124,6 +136,7 @@ class Custom_Post_Filter_Ajax_Handler {
     }
 
     private function render_loop_template($template_id, $post_id) {
+        $this->debug_log("render_loop_template: Rendering template $template_id for post $post_id");
         global $post;
         $post = get_post($post_id);
         setup_postdata($post);
@@ -132,26 +145,37 @@ class Custom_Post_Filter_Ajax_Handler {
         $frontend->get_builder_content_for_display($template_id, true);
         echo $frontend->get_builder_content_for_display($template_id, true);
         wp_reset_postdata();
+        $this->debug_log("render_loop_template: Template rendered");
     }
 
     public function handle_get_terms() {
+        $this->debug_log("handle_get_terms: AJAX request received");
+        
+        if (isset($_GET['elementor-preview']) || 
+            \Elementor\Plugin::$instance->editor->is_edit_mode() || 
+            (defined('DOING_AJAX') && DOING_AJAX && isset($_REQUEST['action']) && $_REQUEST['action'] === 'elementor_ajax')) {
+            $this->debug_log("handle_get_terms: Skipped in editor or Elementor AJAX");
+            wp_send_json_error(['message' => __('Terms fetch disabled in Elementor editor.', 'custom-post-filter')]);
+            wp_die();
+        }
+
         check_ajax_referer('custom_post_filter_nonce', 'nonce');
+        $this->debug_log("handle_get_terms: Nonce verified");
 
         $taxonomy = isset($_POST['taxonomy']) ? sanitize_text_field($_POST['taxonomy']) : '';
         $post_type = isset($_POST['post_type']) ? sanitize_text_field($_POST['post_type']) : 'post';
         $widget_settings = isset($_POST['widget_settings']) ? json_decode(stripslashes($_POST['widget_settings']), true) : [];
 
-        $debug_log = WP_CONTENT_DIR . '/custom-post-filter-debug.log';
-        file_put_contents($debug_log, date('Y-m-d H:i:s') . " - Get Terms: taxonomy=$taxonomy, post_type=$post_type, widget_settings=" . print_r($widget_settings, true) . "\n", FILE_APPEND);
+        $this->debug_log("handle_get_terms: Request data - taxonomy=$taxonomy, post_type=$post_type, widget_settings=" . print_r($widget_settings, true));
 
         if (empty($taxonomy)) {
-            file_put_contents($debug_log, date('Y-m-d H:i:s') . " - Error: No taxonomy provided\n", FILE_APPEND);
+            $this->debug_log("handle_get_terms: Error: No taxonomy provided");
             wp_send_json_error(['message' => 'No taxonomy provided']);
             wp_die();
         }
 
         if (!taxonomy_exists($taxonomy)) {
-            file_put_contents($debug_log, date('Y-m-d H:i:s') . " - Error: Invalid taxonomy: $taxonomy\n", FILE_APPEND);
+            $this->debug_log("handle_get_terms: Error: Invalid taxonomy: $taxonomy");
             wp_send_json_error(['message' => 'Invalid taxonomy']);
             wp_die();
         }
@@ -159,13 +183,13 @@ class Custom_Post_Filter_Ajax_Handler {
         // Build query to match widget's posts
         $query_args = [
             'post_type' => $post_type,
-            'posts_per_page' => -1, // Get all posts to ensure all terms are found
+            'posts_per_page' => -1,
             'post_status' => 'publish',
             'suppress_filters' => false,
             'fields' => 'ids',
         ];
 
-        // Apply widget's query settings (e.g., taxonomy filters, include/exclude)
+        // Apply widget's query settings
         if (!empty($widget_settings['posts_' . $taxonomy])) {
             $query_args['tax_query'] = [
                 [
@@ -181,21 +205,19 @@ class Custom_Post_Filter_Ajax_Handler {
             $query_args['post__not_in'] = array_map('intval', (array)$widget_settings['query_exclude']);
         }
 
-        file_put_contents($debug_log, date('Y-m-d H:i:s') . " - Query Args: " . print_r($query_args, true) . "\n", FILE_APPEND);
+        $this->debug_log("handle_get_terms: Query Args = " . print_r($query_args, true));
 
         $query = new WP_Query($query_args);
         $post_ids = $query->posts;
 
-        file_put_contents($debug_log, date('Y-m-d H:i:s') . " - Queried Post IDs: " . (empty($post_ids) ? 'None' : implode(', ', $post_ids)) . "\n", FILE_APPEND);
+        $this->debug_log("handle_get_terms: Queried Post IDs = " . (empty($post_ids) ? 'None' : implode(', ', $post_ids)));
 
         $terms = [];
         if (!empty($post_ids)) {
-            // Get terms assigned to the queried posts
             $terms_data = wp_get_object_terms($post_ids, $taxonomy, ['fields' => 'all']);
             if (!is_wp_error($terms_data)) {
                 $term_counts = [];
                 foreach ($terms_data as $term) {
-                    // Count posts per term within the queried posts
                     $term_post_ids = get_objects_in_term($term->term_id, $taxonomy);
                     $term_post_count = count(array_intersect($post_ids, $term_post_ids));
                     if ($term_post_count > 0) {
@@ -207,13 +229,12 @@ class Custom_Post_Filter_Ajax_Handler {
                         ];
                     }
                 }
-                file_put_contents($debug_log, date('Y-m-d H:i:s') . " - Term Counts: " . print_r($term_counts, true) . "\n", FILE_APPEND);
+                $this->debug_log("handle_get_terms: Term Counts = " . print_r($term_counts, true));
             } else {
-                file_put_contents($debug_log, date('Y-m-d H:i:s') . " - Error fetching terms: " . $terms_data->get_error_message() . "\n", FILE_APPEND);
+                $this->debug_log("handle_get_terms: Error fetching terms: " . $terms_data->get_error_message());
             }
         }
 
-        // Fallback: Get all terms if no posts found, to avoid empty dropdown
         if (empty($terms)) {
             $terms_data = get_terms([
                 'taxonomy' => $taxonomy,
@@ -227,18 +248,23 @@ class Custom_Post_Filter_Ajax_Handler {
                         'count' => $term->count,
                     ];
                 }
-                file_put_contents($debug_log, date('Y-m-d H:i:s') . " - Fallback to all terms: " . count($terms_data) . "\n", FILE_APPEND);
+                $this->debug_log("handle_get_terms: Fallback to all terms: " . count($terms_data));
             }
         }
 
-        // Sort terms alphabetically
         usort($terms, function($a, $b) {
             return strcasecmp($a['name'], $b['name']);
         });
 
-        file_put_contents($debug_log, date('Y-m-d H:i:s') . " - Terms Found: " . count($terms) . "\n", FILE_APPEND);
+        $this->debug_log("handle_get_terms: Terms Found: " . count($terms));
         wp_send_json_success(['terms' => $terms]);
         wp_die();
+    }
+
+    private function debug_log($message) {
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('Custom Post Filter [v1.0.10]: ' . $message);
+        }
     }
 }
 
