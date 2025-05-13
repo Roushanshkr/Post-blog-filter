@@ -1,0 +1,60 @@
+.custom-post-filter {
+    position: relative;
+    margin-bottom: 20px;
+    background: #fff;
+    padding: 10px;
+    border-radius: 5px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+.custom-post-filter label {
+    margin-right: 10px;
+    font-weight: 600;
+}
+
+.custom-post-filter select {
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    min-width: 200px;
+}
+
+.custom-post-filter-loading .elementor-posts-container,
+.custom-post-filter-loading .elementor-loop-container,
+.custom-post-filter-loading .swiper-wrapper {
+    position: relative;
+    min-height: 200px;
+    opacity: 0.7;
+}
+
+.custom-post-filter-loading .elementor-posts-container::after,
+.custom-post-filter-loading .elementor-loop-container::after,
+.custom-post-filter-loading .swiper-wrapper::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 30px;
+    height: 30px;
+    border: 3px solid #ddd;
+    border-top-color: #0073aa;
+    border-radius: 50%;
+    animation: custom-post-filter-spin 1s linear infinite;
+    transform: translate(-50%, -50%);
+}
+
+@keyframes custom-post-filter-spin {
+    to {
+        transform: translate(-50%, -50%) rotate(360deg);
+    }
+}
+
+@media (max-width: 767px) {
+    .custom-post-filter {
+        width: 100%;
+    }
+
+    .custom-post-filter select {
+        width: 100%;
+    }
+}
